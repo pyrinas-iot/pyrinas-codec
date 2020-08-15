@@ -1,5 +1,5 @@
-#ifndef _BLE_CODEC_H
-#define _BLE_CODEC_H
+#ifndef _PYRINAS_CODEC_H
+#define _PYRINAS_CODEC_H
 
 #include <stddef.h>
 #include <stdint.h>
@@ -22,11 +22,11 @@ typedef struct
     ble_event_data_t data;
     uint8_t faddr[6];
     uint8_t taddr[6];
-} ble_event_t;
+} pyrinas_event_t;
 
-#define ble_event_t_size sizeof(ble_event_t) + 64
+#define pyrinas_event_t_size sizeof(pyrinas_event_t) + 64
 
-int ble_codec_encode(const ble_event_t *p_data, uint8_t *p_buf, size_t len, size_t *p_size);
-int ble_codec_decode(ble_event_t *p_data, const uint8_t *p_buf, size_t len);
+int pyrinas_codec_encode(const pyrinas_event_t *p_data, uint8_t *p_buf, size_t len, size_t *p_size);
+int pyrinas_codec_decode(pyrinas_event_t *p_data, const uint8_t *p_buf, size_t len);
 
-#endif
+#endif /* _PYRINAS_CODEC_H */
