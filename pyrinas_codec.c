@@ -8,7 +8,7 @@
 #include <cbor.h>
 #endif
 
-#if defined(NRF_LOG_ENABLED)
+#if defined(__PYRINAS_OS__)
 #include "nrf_log.h"
 #include "nrf_log_ctrl.h"
 #endif
@@ -62,7 +62,7 @@ int pyrinas_codec_encode(const pyrinas_event_t *p_data, uint8_t *p_buf, size_t b
     *p_size = cbor_encoder_get_buffer_size(&cbor, p_buf);
 #endif
 
-#if defined(NRF_LOG_ENABLED)
+#if defined(__PYRINAS_OS__)
     NRF_LOG_HEXDUMP_DEBUG(p_buf, *p_size);
 #endif
 
@@ -88,14 +88,14 @@ int pyrinas_codec_decode(pyrinas_event_t *p_data, const uint8_t *p_buf, size_t l
     if (err)
         return -1;
 
-#if defined(NRF_LOG_ENABLED)
+#if defined(__PYRINAS_OS__)
     NRF_LOG_HEXDUMP_DEBUG(p_buf, len);
 #endif
 
     /* Return if we're not dealing with a map*/
     if (!cbor_value_is_map(&value))
     {
-#if defined(NRF_LOG_ENABLED)
+#if defined(__PYRINAS_OS__)
         NRF_LOG_ERROR("Unexpected CBOR data structure.\n");
 #endif
         return -1;
