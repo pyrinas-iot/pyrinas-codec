@@ -1,136 +1,131 @@
 #include "pyrinas_codec.h"
+#include "qcbor.h"
 
-#if defined(CONFIG_TINYCBOR)
-#include <tinycbor/cbor.h>
-#include <tinycbor/cbor_buf_writer.h>
-#include <tinycbor/cbor_buf_reader.h>
-#else
-#include <cbor.h>
+#if defined(__ZEPHYR__)
+#include <logging/log.h>
+LOG_MODULE_REGISTER(pyrinas_codec);
 #endif
 
 #if defined(__PYRINAS_OS__)
 #include "nrf_log.h"
 #include "nrf_log_ctrl.h"
+
+#define LOG_INF(...) NRF_LOG_INFO(__VA_ARGS__)
+#define LOG_ERR(...) NRF_LOG_ERROR(__VA_ARGS__)
 #endif
 
-int pyrinas_codec_encode(const pyrinas_event_t *p_data, uint8_t *p_buf, size_t buf_len, size_t *p_size)
+#define OVERFLOW_ERROR "Potential overflow condition for: %s!"
+
+QCBORError pyrinas_codec_encode(const pyrinas_event_t *p_data, uint8_t *p_buf, size_t buf_len, size_t *p_size)
 {
-    CborEncoder cbor, cbor_map;
-    CborError err;
-    int i = 0;
+    // Setup of the goods
+    UsefulBuf buf = {
+        .ptr = p_buf,
+        .len = buf_len};
+    QCBOREncodeContext ec;
+    QCBOREncode_Init(&ec, buf);
 
-#if defined(CONFIG_TINYCBOR)
-    struct cbor_buf_writer writer;
-    cbor_buf_writer_init(&writer, p_buf, buf_len);
-    cbor_encoder_init(&cbor, &writer.enc, 0);
-#else
-    cbor_encoder_init(&cbor, p_buf, buf_len, 0);
-#endif
+    /* Create over-arching map */
+    QCBOREncode_OpenMap(&ec);
 
-    err = cbor_encoder_create_map(&cbor, &cbor_map, CborIndefiniteLength);
-    if (err)
-        return -1;
+    UsefulBufC data = {
+        .ptr = p_data->name.bytes,
+        .len = p_data->name.size};
+    QCBOREncode_AddBytesToMapN(&ec, event_name_pos, data);
 
-    cbor_encode_uint(&cbor_map, i++);
-    err = cbor_encode_byte_string(&cbor_map, p_data->name.bytes, p_data->name.size);
-    if (err)
-        return -1;
+    data.ptr = p_data->data.bytes;
+    data.len = p_data->data.size;
+    QCBOREncode_AddBytesToMapN(&ec, event_data_pos, data);
 
-    cbor_encode_uint(&cbor_map, i++);
-    err = cbor_encode_byte_string(&cbor_map, p_data->data.bytes, p_data->data.size);
-    if (err)
-        return -1;
+    data.ptr = p_data->faddr;
+    data.len = sizeof(p_data->faddr);
+    QCBOREncode_AddBytesToMapN(&ec, event_faddr_pos, data);
 
-    cbor_encode_uint(&cbor_map, i++);
-    err = cbor_encode_byte_string(&cbor_map, p_data->faddr, sizeof(p_data->faddr));
-    if (err)
-        return -1;
+    data.ptr = p_data->taddr;
+    data.len = sizeof(p_data->taddr);
+    QCBOREncode_AddBytesToMapN(&ec, event_taddr_pos, data);
 
-    cbor_encode_uint(&cbor_map, i++);
-    err = cbor_encode_byte_string(&cbor_map, p_data->taddr, sizeof(p_data->taddr));
-    if (err)
-        return -1;
+    QCBOREncode_CloseMap(&ec);
 
-    err = cbor_encoder_close_container(&cbor, &cbor_map);
-    if (err)
-        return -1;
-
-/* Buff size */
-#if defined(CONFIG_TINYCBOR)
-    *p_size = (size_t)(writer.ptr - p_buf);
-#else
-    *p_size = cbor_encoder_get_buffer_size(&cbor, p_buf);
-#endif
-
-#if defined(__PYRINAS_OS__)
-    NRF_LOG_HEXDUMP_DEBUG(p_buf, *p_size);
-#endif
-
-    return 0;
+    return QCBOREncode_FinishGetSize(&ec, p_size);
 }
 
 int pyrinas_codec_decode(pyrinas_event_t *p_data, const uint8_t *p_buf, size_t len)
 {
 
-    CborParser parser;
-    CborValue value, map_value;
-    CborError err;
+    // Setup of the goods
+    UsefulBufC buf = {
+        .ptr = p_buf,
+        .len = len};
+    QCBORDecodeContext dc;
+    QCBORItem item;
+    QCBORDecode_Init(&dc, buf, QCBOR_DECODE_MODE_NORMAL);
 
-#if defined(CONFIG_TINYCBOR)
-    struct cbor_buf_reader reader;
-
-    /* initalize the reader */
-    cbor_buf_reader_init(&reader, p_buf, len);
-    err = cbor_parser_init(&reader.r, 0, &parser, &value);
-#else
-    err = cbor_parser_init(p_buf, len, 0, &parser, &value);
-#endif
-    if (err)
-        return -1;
-
-#if defined(__PYRINAS_OS__)
-    NRF_LOG_HEXDUMP_DEBUG(p_buf, len);
-#endif
-
-    /* Return if we're not dealing with a map*/
-    if (!cbor_value_is_map(&value))
+    QCBORDecode_GetNext(&dc, &item);
+    if (item.uDataType != QCBOR_TYPE_MAP)
     {
-#if defined(__PYRINAS_OS__)
-        NRF_LOG_ERROR("Unexpected CBOR data structure.\n");
-#endif
+        LOG_ERR("Expected CBOR map structure.");
         return -1;
     }
 
-    /* Enter map */
-    cbor_value_enter_container(&value, &map_value);
+    /* Need to set this in stone before iteration*/
+    const uint8_t count = item.val.uCount;
 
-    /* Get name */
-    size_t size = sizeof(p_data->name.bytes);
-    cbor_value_advance_fixed(&map_value);
-    err = cbor_value_copy_byte_string(&map_value, p_data->name.bytes, &size, &map_value);
-    if (err)
-        return -1;
-    p_data->name.size = size;
+    for (int i = 0; i < count; i++)
+    {
 
-    // Get data
-    size = sizeof(p_data->data.bytes);
-    cbor_value_advance_fixed(&map_value);
-    err = cbor_value_copy_byte_string(&map_value, p_data->data.bytes, &size, &map_value);
-    if (err)
-        return -1;
-    p_data->data.size = size;
+        QCBORDecode_GetNext(&dc, &item);
 
-    size = sizeof(p_data->faddr);
-    cbor_value_advance_fixed(&map_value);
-    err = cbor_value_copy_byte_string(&map_value, p_data->faddr, &size, &map_value);
-    if (err)
-        return -1;
-
-    size = sizeof(p_data->taddr);
-    cbor_value_advance_fixed(&map_value);
-    err = cbor_value_copy_byte_string(&map_value, p_data->taddr, &size, &map_value);
-    if (err)
-        return -1;
+        switch (item.label.int64)
+        {
+        case event_name_pos:
+            if (item.val.string.len <= sizeof(p_data->name.bytes))
+            {
+                // Copy over contents
+                memcpy(p_data->name.bytes, item.val.string.ptr, item.val.string.len);
+                p_data->name.size = item.val.string.len;
+            }
+            else
+            {
+                LOG_ERR(OVERFLOW_ERROR, "name");
+            }
+            break;
+        case event_data_pos:
+            if (item.val.string.len <= sizeof(p_data->data.bytes))
+            {
+                // Copy over contents
+                memcpy(p_data->data.bytes, item.val.string.ptr, item.val.string.len);
+                p_data->data.size = item.val.string.len;
+            }
+            else
+            {
+                LOG_ERR(OVERFLOW_ERROR, "data");
+            }
+            break;
+        case event_faddr_pos:
+            if (item.val.string.len == sizeof(p_data->faddr))
+            {
+                // Copy over contents
+                memcpy(p_data->faddr, item.val.string.ptr, item.val.string.len);
+            }
+            else
+            {
+                LOG_ERR(OVERFLOW_ERROR, "faddr");
+            }
+            break;
+        case event_taddr_pos:
+            if (item.val.string.len == sizeof(p_data->taddr))
+            {
+                // Copy over contents
+                memcpy(p_data->taddr, item.val.string.ptr, item.val.string.len);
+            }
+            else
+            {
+                LOG_ERR(OVERFLOW_ERROR, "taddr");
+            }
+            break;
+        }
+    }
 
     return 0;
 }
