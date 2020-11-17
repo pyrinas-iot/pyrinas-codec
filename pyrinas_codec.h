@@ -21,16 +21,20 @@ typedef struct
 {
     pyrinas_event_name_data_t name;
     pyrinas_event_data_t data;
-    uint8_t faddr[6];
-    uint8_t taddr[6];
+    uint8_t peripheral_addr[6];
+    uint8_t central_addr[6];
+    int8_t peripheral_rssi;
+    int8_t central_rssi;
 } pyrinas_event_t;
 
 typedef enum
 {
     event_name_pos,
     event_data_pos,
-    event_faddr_pos,
-    event_taddr_pos,
+    event_peripheral_addr_pos,
+    event_central_addr_pos,
+    event_peripheral_rssi_pos,
+    event_central_rssi_pos
 } pyrinas_event_pos_t;
 
 #define pyrinas_event_t_size 184 + 64

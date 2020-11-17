@@ -12,6 +12,7 @@ LOG_MODULE_REGISTER(pyrinas_codec);
 
 #define LOG_INF(...) NRF_LOG_INFO(__VA_ARGS__)
 #define LOG_ERR(...) NRF_LOG_ERROR(__VA_ARGS__)
+#define LOG_WRN(...) NRF_LOG_WARNING(__VA_ARGS__)
 #endif
 
 #define OVERFLOW_ERROR "Potential overflow condition for: %s!"
@@ -37,13 +38,15 @@ QCBORError pyrinas_codec_encode(const pyrinas_event_t *p_data, uint8_t *p_buf, s
     data.len = p_data->data.size;
     QCBOREncode_AddBytesToMapN(&ec, event_data_pos, data);
 
-    data.ptr = p_data->faddr;
-    data.len = sizeof(p_data->faddr);
-    QCBOREncode_AddBytesToMapN(&ec, event_faddr_pos, data);
+    data.ptr = p_data->peripheral_addr;
+    data.len = sizeof(p_data->peripheral_addr);
+    QCBOREncode_AddBytesToMapN(&ec, event_peripheral_addr_pos, data);
+    QCBOREncode_AddInt64ToMapN(&ec, event_peripheral_rssi_pos, p_data->peripheral_rssi);
 
-    data.ptr = p_data->taddr;
-    data.len = sizeof(p_data->taddr);
-    QCBOREncode_AddBytesToMapN(&ec, event_taddr_pos, data);
+    data.ptr = p_data->central_addr;
+    data.len = sizeof(p_data->central_addr);
+    QCBOREncode_AddBytesToMapN(&ec, event_central_addr_pos, data);
+    QCBOREncode_AddInt64ToMapN(&ec, event_central_rssi_pos, p_data->central_rssi);
 
     QCBOREncode_CloseMap(&ec);
 
@@ -53,18 +56,23 @@ QCBORError pyrinas_codec_encode(const pyrinas_event_t *p_data, uint8_t *p_buf, s
 int pyrinas_codec_decode(pyrinas_event_t *p_data, const uint8_t *p_buf, size_t len)
 {
 
-    // Setup of the goods
+    /* Setup of the goods */
     UsefulBufC buf = {
         .ptr = p_buf,
         .len = len};
     QCBORDecodeContext dc;
     QCBORItem item;
+
+    /* Clear memory contents before work */
+    memset(p_data, 0, sizeof(pyrinas_event_t));
+
+    /* Start decode process */
     QCBORDecode_Init(&dc, buf, QCBOR_DECODE_MODE_NORMAL);
 
     QCBORDecode_GetNext(&dc, &item);
     if (item.uDataType != QCBOR_TYPE_MAP)
     {
-        LOG_ERR("Expected CBOR map structure.");
+        LOG_WRN("Expected CBOR map structure.");
         return -1;
     }
 
@@ -102,27 +110,34 @@ int pyrinas_codec_decode(pyrinas_event_t *p_data, const uint8_t *p_buf, size_t l
                 LOG_ERR(OVERFLOW_ERROR, "data");
             }
             break;
-        case event_faddr_pos:
-            if (item.val.string.len == sizeof(p_data->faddr))
+        case event_central_addr_pos:
+            if (item.val.string.len == sizeof(p_data->central_addr))
             {
                 // Copy over contents
-                memcpy(p_data->faddr, item.val.string.ptr, item.val.string.len);
+                memcpy(p_data->central_addr, item.val.string.ptr, item.val.string.len);
             }
             else
             {
-                LOG_ERR(OVERFLOW_ERROR, "faddr");
+                LOG_ERR(OVERFLOW_ERROR, "addr");
             }
             break;
-        case event_taddr_pos:
-            if (item.val.string.len == sizeof(p_data->taddr))
+        case event_peripheral_addr_pos:
+            if (item.val.string.len == sizeof(p_data->peripheral_addr))
             {
                 // Copy over contents
-                memcpy(p_data->taddr, item.val.string.ptr, item.val.string.len);
+                memcpy(p_data->peripheral_addr, item.val.string.ptr, item.val.string.len);
             }
             else
             {
-                LOG_ERR(OVERFLOW_ERROR, "taddr");
+                LOG_ERR(OVERFLOW_ERROR, "addr");
             }
+            break;
+        case event_central_rssi_pos:
+            p_data->central_rssi = (int8_t)item.val.int64;
+            break;
+
+        case event_peripheral_rssi_pos:
+            p_data->peripheral_rssi = (int8_t)item.val.int64;
             break;
         }
     }
