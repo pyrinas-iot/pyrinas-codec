@@ -1,7 +1,13 @@
+/*
+ * Copyright (c) 2021 Circuit Dojo LLC
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 #ifndef _PYRINAS_CODEC_H
 #define _PYRINAS_CODEC_H
 
-#include <qcbor.h>
+#include <qcbor/qcbor.h>
 #include <stddef.h>
 #include <stdint.h>
 

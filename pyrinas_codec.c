@@ -1,5 +1,11 @@
+/*
+ * Copyright (c) 2021 Circuit Dojo LLC
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 #include "pyrinas_codec.h"
-#include "qcbor.h"
+#include "qcbor/qcbor.h"
 
 #if defined(__ZEPHYR__)
 #include <logging/log.h>
